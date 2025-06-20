@@ -1,0 +1,324 @@
+<!-- BEGINNING OF FILE -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mental Health Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #000;
+      --text: #fff;
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --primary: #00ffff;
+      --btn-bg: #111;
+      --btn-text: #00ffff;
+    }
+
+    body.light {
+      --bg: #f4f7fa;
+      --text: #000;
+      --card-bg: rgba(0, 0, 0, 0.05);
+      --primary: #0077cc;
+      --btn-bg: #e0e0e0;
+      --btn-text: #0077cc;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.5s, color 0.5s;
+    }
+
+    canvas#bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: -1;
+    }
+
+    #themeToggle {
+      position: fixed;
+      top: 15px;
+      right: 20px;
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .intro {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(45deg, #1e3c72, #2a5298);
+      animation: fadeOut 1s ease 3s forwards;
+    }
+
+    .intro h1 {
+      font-size: 3em;
+      color: #fff;
+      animation: glow 2s infinite alternate;
+    }
+
+    .intro p {
+      font-size: 1.2em;
+      color: #fff;
+      margin-top: 10px;
+    }
+
+    @keyframes glow {
+      from { text-shadow: 0 0 10px #fff; }
+      to { text-shadow: 0 0 30px var(--primary), 0 0 60px var(--primary); }
+    }
+
+    @keyframes fadeOut {
+      to { opacity: 0; visibility: hidden; height: 0; overflow: hidden; margin: 0; padding: 0; }
+    }
+
+    .dashboard {
+      display: none;
+      padding: 30px 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+
+    .card .label {
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .card .value {
+      font-size: 26px;
+      font-weight: bold;
+      color: var(--primary);
+      margin-top: 5px;
+    }
+
+    .tabs {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .tabs button {
+      background: var(--btn-bg);
+      color: var(--btn-text);
+      border: 1px solid var(--btn-text);
+      padding: 10px 20px;
+      margin: 0 5px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .tabs button.active {
+      background: var(--primary);
+      color: var(--bg);
+    }
+
+    .chart-container {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 40px;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text);
+      font-size: 14px;
+      margin-top: 50px;
+    }
+  </style>
+</head>
+
+<body class="light">
+  <canvas id="bg"></canvas>
+
+  <div class="intro">
+    <h1>Mental Health Dashboard</h1>
+    <p>Monitoring community mental health indicators</p>
+  </div>
+
+  <button id="themeToggle" title="Toggle Theme">☀️</button>
+
+  <div class="dashboard" id="dashboard">
+    <h2 style="text-align:center;">Mental Health Screening Dashboard</h2>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="tabs">
+      <button class="active" onclick="switchTab('clinic')">Clinic-wise</button>
+      <button onclick="switchTab('month')">Month-wise</button>
+    </div>
+
+    <div class="chart-container" id="clinicChartContainer">
+      <canvas id="clinicChart"></canvas>
+    </div>
+
+    <div class="chart-container" id="monthChartContainer" style="display:none;">
+      <canvas id="monthChart"></canvas>
+    </div>
+
+    <footer>
+      <strong>Developed by Awais Alam</strong><br />
+      MIS & Data Analytics (HOD)
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const summaryData = [
+      { label: "Total Screenings", value: 26350 },
+      { label: "Screened Once", value: 16938 },
+      { label: "Positive Screening - Visits", value: 6009 },
+      { label: "Positive Screening - People", value: 4795 },
+      { label: "Referred to Counsellors - Visits", value: 5560 },
+      { label: "Referred to Counsellors - People", value: 4427 },
+      { label: "Referred to Tertiary Care - Visits", value: 520 },
+      { label: "Referred to Tertiary Care - People", value: 463 },
+      { label: "Leaflets Provided - Visits", value: 3673 },
+      { label: "Leaflets Provided - People", value: 3048 }
+    ];
+
+    const clinicLabels = ["North", "Pipri", "Islamia", "Zareena Colony", "Majeed Colony IIL", "Shireen Jinnah", "Bhitaiabad", "Moach Goth", "Ghaggar Phatak", "Jamali", "Chishti Nagar", "Tameer-e-Millat", "Yousuf 4K", "Machar Gujro", "Baldia", "Ittehad OT", "Sherpao", "Saindad", "Saleh Muhammad Goth", "Songhal", "Khair Muhammad Goth", "Bilal", "Saeedabad", "Jummah Goth", "Sukhiya"];
+    const clinicCounts = [2522, 1211, 544, 601, 1641, 2018, 1341, 630, 1863, 2102, 1100, 2416, 747, 1216, 1267, 647, 211, 1, 993, 1, 188, 3087, 1, 1, 1];
+
+    const monthLabels = ["Sep-2024", "Oct-2024", "Nov-2024", "Dec-2024", "Jan-2025", "Feb-2025", "Mar-2025", "Apr-2025", "May-2025", "Jun-2025", "Jul-2025", "Oct-2025", "Nov-2025", "Dec-2025"];
+    const monthCounts = [1, 2, 1598, 3453, 5846, 4066, 2898, 3566, 3708, 1140, 1, 1, 16, 21];
+
+    const summaryContainer = document.getElementById('summary');
+    summaryData.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
+      summaryContainer.appendChild(div);
+      animateNumber(div.querySelector('.value'), item.value);
+    });
+
+    function animateNumber(el, end) {
+      let current = 0;
+      const step = () => {
+        current += Math.ceil(end / 60);
+        if (current >= end) {
+          el.textContent = end.toLocaleString();
+        } else {
+          el.textContent = current.toLocaleString();
+          requestAnimationFrame(step);
+        }
+      };
+      step();
+    }
+
+    new Chart(document.getElementById("clinicChart").getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: clinicLabels,
+        datasets: [{
+          label: "Screenings by Clinic",
+          data: clinicCounts,
+          backgroundColor: "#0077cc"
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        scales: { x: { beginAtZero: true } }
+      }
+    });
+
+    new Chart(document.getElementById("monthChart").getContext("2d"), {
+      type: "line",
+      data: {
+        labels: monthLabels,
+        datasets: [{
+          label: "Screenings by Month",
+          data: monthCounts,
+          borderColor: "#10b981",
+          backgroundColor: "#10b981",
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tabs button').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`.tabs button[onclick*="${tab}"]`).classList.add('active');
+      document.getElementById("clinicChartContainer").style.display = tab === 'clinic' ? 'block' : 'none';
+      document.getElementById("monthChartContainer").style.display = tab === 'month' ? 'block' : 'none';
+    }
+
+    setTimeout(() => {
+      document.querySelector('.intro').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }, 3100);
+
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      document.body.classList.toggle("light");
+      document.getElementById("themeToggle").textContent = document.body.classList.contains("light") ? "☀️" : "🌙";
+    });
+
+    // Sparkle trail
+    const canvas = document.getElementById('bg');
+    const ctx = canvas.getContext('2d');
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = window.innerHeight;
+    window.onresize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+
+    let sparks = [];
+    document.addEventListener("mousemove", e => {
+      for (let i = 0; i < 5; i++) {
+        sparks.push({
+          x: e.clientX, y: e.clientY,
+          vx: (Math.random() - 0.5) * 2,
+          vy: (Math.random() - 0.5) * 2,
+          alpha: 1, radius: Math.random() * 2 + 1
+        });
+      }
+    });
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < sparks.length; i++) {
+        let p = sparks[i];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, 2 * Math.PI);
+        ctx.fillStyle = `rgba(0,255,255,${p.alpha})`;
+        ctx.fill();
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= 0.02;
+        if (p.alpha <= 0) {
+          sparks.splice(i, 1);
+          i--;
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  </script>
+</body>
+</html>
