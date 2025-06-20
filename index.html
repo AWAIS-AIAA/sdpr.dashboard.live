@@ -28,12 +28,6 @@
       color: var(--text);
       transition: background 0.5s, color 0.5s;
     }
-    canvas#bg {
-      position: fixed;
-      top: 0;
-      left: 0;
-      z-index: -1;
-    }
     #themeToggle {
       position: fixed;
       top: 15px;
@@ -131,25 +125,30 @@
   </style>
 </head>
 <body class="light">
-  <canvas id="bg"></canvas>
   <div class="intro">
     <h1>Mental Health Dashboard</h1>
     <p>Monitoring community mental health indicators</p>
   </div>
+
   <button id="themeToggle" title="Toggle Theme">☀️</button>
+
   <div class="dashboard" id="dashboard">
     <h2 style="text-align:center;">Mental Health Screening Dashboard</h2>
     <div class="summary" id="summary"></div>
+
     <div class="tabs">
       <button class="active" onclick="switchTab('clinic')">Clinic-wise</button>
       <button onclick="switchTab('month')">Month-wise</button>
     </div>
+
     <div class="chart-container" id="clinicChartContainer">
       <canvas id="clinicChart"></canvas>
     </div>
+
     <div class="chart-container" id="monthChartContainer" style="display:none;">
       <canvas id="monthChart"></canvas>
     </div>
+
     <footer>
       <strong>Developed by Awais Alam</strong><br />
       MIS & Data Analytics (HOD)
@@ -158,18 +157,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    async function fetchSheet() {
-      const res = await fetch("https://opensheet.elk.sh/1kD2yBks4NTm3xN5bZSDse1gJfPohmqkRxhXaxkQ8tL0/Data");
-      return await res.json();
-    }
+    const sheetURL = "https://opensheet.elk.sh/1kD2yBks4NTm3xN5bZSDse1gJfPohmqkRxhXaxkQ8tL0/Data";
 
     function isMonth(str) {
       return /\w{3,}-\d{4}/.test(str) || /\w{3,} \d{4}/.test(str);
     }
 
     function animateNumber(el, end, duration = 2000) {
-      let start = 0;
-      let startTime = null;
+      let start = 0, startTime = null;
       function update(currentTime) {
         if (!startTime) startTime = currentTime;
         const progress = currentTime - startTime;
@@ -181,35 +176,48 @@
       requestAnimationFrame(update);
     }
 
-    function renderSummary(summary) {
-      const container = document.getElementById('summary');
-      container.innerHTML = '';
-      summary.forEach(item => {
+    function renderSummary(data) {
+      const summaryContainer = document.getElementById('summary');
+      summaryContainer.innerHTML = '';
+      data.forEach(item => {
         const div = document.createElement('div');
         div.className = 'card';
         div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
-        container.appendChild(div);
-        setTimeout(() => animateNumber(div.querySelector('.value'), item.value, 2000), 3200);
+        summaryContainer.appendChild(div);
+        setTimeout(() => {
+          animateNumber(div.querySelector('.value'), item.value, 2000);
+        }, 3200); // after intro
       });
+    }
+
+    async function fetchSheet() {
+      const res = await fetch(sheetURL);
+      return await res.json();
     }
 
     async function loadData() {
       const rows = await fetchSheet();
       const summary = [], clinics = [], months = [];
       let mode = 'summary';
-      for (let r of rows) {
-        const label = r.Label?.trim(), value = r.Value?.trim();
+
+      for (let row of rows) {
+        const label = row.Label?.trim();
+        const value = row.Value?.trim();
         if (!label && !value) continue;
         if (label === 'Cliniwise total screening') { mode = 'clinic'; continue; }
         if (label === 'Monthwise total screening') { mode = 'month'; continue; }
+
         if (mode === 'clinic' && label && value) clinics.push({ Clinic: label, Count: Number(value) });
         else if (mode === 'month' && label && value && isMonth(label)) months.push({ Month: label, Count: Number(value) });
         else if (mode === 'summary' && label && value) summary.push({ label, value: Number(value) });
       }
+
       renderSummary(summary);
+
       if (window.clinicChart) window.clinicChart.destroy();
       if (window.monthChart) window.monthChart.destroy();
-      window.clinicChart = new Chart(document.getElementById("clinicChart"), {
+
+      window.clinicChart = new Chart(document.getElementById("clinicChart").getContext("2d"), {
         type: "bar",
         data: {
           labels: clinics.map(c => c.Clinic),
@@ -217,7 +225,8 @@
         },
         options: { indexAxis: "y", responsive: true, scales: { x: { beginAtZero: true } } }
       });
-      window.monthChart = new Chart(document.getElementById("monthChart"), {
+
+      window.monthChart = new Chart(document.getElementById("monthChart").getContext("2d"), {
         type: "line",
         data: {
           labels: months.map(m => m.Month),
@@ -229,7 +238,7 @@
 
     async function initDashboard() {
       await loadData();
-      setInterval(loadData, 60000); // refresh every 60 seconds
+      setInterval(loadData, 60000); // Refresh every 60s
     }
 
     function switchTab(tab) {
@@ -246,41 +255,10 @@
 
     document.getElementById("themeToggle").addEventListener("click", () => {
       document.body.classList.toggle("light");
-      document.getElementById("themeToggle").textContent = document.body.classList.contains("light") ? "☀️" : "🌙";
+      document.getElementById("themeToggle").textContent =
+        document.body.classList.contains("light") ? "☀️" : "🌙";
     });
 
-    const canvas = document.getElementById('bg');
-    const ctx = canvas.getContext('2d');
-    let w = canvas.width = window.innerWidth;
-    let h = canvas.height = window.innerHeight;
-    window.onresize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
-    let sparks = [];
-    document.addEventListener("mousemove", e => {
-      for (let i = 0; i < 5; i++) {
-        sparks.push({
-          x: e.clientX, y: e.clientY,
-          vx: (Math.random() - 0.5) * 2,
-          vy: (Math.random() - 0.5) * 2,
-          alpha: 1, radius: Math.random() * 2 + 1
-        });
-      }
-    });
-    function draw() {
-      ctx.clearRect(0, 0, w, h);
-      for (let i = 0; i < sparks.length; i++) {
-        let p = sparks[i];
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, 2 * Math.PI);
-        ctx.fillStyle = `rgba(0,255,255,${p.alpha})`;
-        ctx.fill();
-        p.x += p.vx;
-        p.y += p.vy;
-        p.alpha -= 0.02;
-        if (p.alpha <= 0) { sparks.splice(i, 1); i--; }
-      }
-      requestAnimationFrame(draw);
-    }
-    draw();
     window.addEventListener('DOMContentLoaded', initDashboard);
   </script>
 </body>
