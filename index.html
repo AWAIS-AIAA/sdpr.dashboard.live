@@ -322,6 +322,65 @@
     }
 
     draw();
+// Refresh Data
+    let summary = [], clinics = [], months = [];
+
+async function fetchAndUpdate() {
+  const rows = await fetchSheet();
+
+  const newSummary = [];
+  const newClinics = [];
+  const newMonths = [];
+
+  let mode = 'summary';
+
+  for (let i = 0; i < rows.length; i++) {
+    const label = rows[i].Label?.trim();
+    const value = rows[i].Value?.trim();
+
+    if (!label && !value) continue;
+    if (label === 'Cliniwise total screening') {
+      mode = 'clinic';
+      continue;
+    }
+    if (label === 'Monthwise total screening') {
+      mode = 'month';
+      continue;
+    }
+
+    if (mode === 'clinic' && label && value) {
+      newClinics.push({ Clinic: label, Count: Number(value) });
+    } else if (mode === 'month' && label && value && isMonth(label)) {
+      newMonths.push({ Month: label, Count: Number(value) });
+    } else if (mode === 'summary' && label && value) {
+      newSummary.push({ label, value: Number(value) });
+    }
+  }
+
+  // Update Summary Cards
+  document.querySelectorAll('#summary .value').forEach((el, i) => {
+    if (newSummary[i]) animateNumber(el, newSummary[i].value);
+  });
+
+  // Update Clinic Chart
+  clinicChart.data.labels = newClinics.map(c => c.Clinic);
+  clinicChart.data.datasets[0].data = newClinics.map(c => c.Count);
+  clinicChart.update();
+
+  // Update Month Chart
+  monthChart.data.labels = newMonths.map(m => m.Month);
+  monthChart.data.datasets[0].data = newMonths.map(m => m.Count);
+  monthChart.update();
+
+  // Update cached data
+  summary = newSummary;
+  clinics = newClinics;
+  months = newMonths;
+}
+
+// 🔁 Check for updates every 60 seconds
+setInterval(fetchAndUpdate, 5000);
+    
     document.addEventListener('DOMContentLoaded', initDashboard);
   </script>
 </body>
