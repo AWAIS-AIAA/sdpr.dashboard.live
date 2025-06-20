@@ -149,134 +149,143 @@
     </footer>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    const SHEET_URL = "https://opensheet.elk.sh/1kD2yBks4NTm3xN5bZSDse1gJfPohmqkRxhXaxkQ8tL0/Data";
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const SHEET_URL = "https://opensheet.elk.sh/1kD2yBks4NTm3xN5bZSDse1gJfPohmqkRxhXaxkQ8tL0/Data";
+  let hasAnimatedSummary = false;
 
-    function isMonth(str) {
-      return /^\w{3,}[- ]\d{4}$/.test(str);
+  function isMonth(str) {
+    return /^\w{3,}[- ]\d{4}$/.test(str);
+  }
+
+  async function fetchSheet() {
+    const res = await fetch(SHEET_URL);
+    return await res.json();
+  }
+
+  function animateNumber(el, end, duration = 2000) {
+    let start = 0, startTime = null;
+    function update(ts) {
+      if (!startTime) startTime = ts;
+      const pct = Math.min((ts - startTime) / duration, 1);
+      el.textContent = Math.floor(start + (end - start) * pct).toLocaleString();
+      if (pct < 1) requestAnimationFrame(update);
     }
+    requestAnimationFrame(update);
+  }
 
-    async function fetchSheet() {
-      const res = await fetch(SHEET_URL);
-      return await res.json();
-    }
+  function renderSummary(data) {
+    const container = document.getElementById("summary");
+    container.innerHTML = "";
+    data.forEach(item => {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
+      container.appendChild(div);
+      const el = div.querySelector(".value");
 
-    function animateNumber(el, end, duration = 2000) {
-      let start = 0, startTime = null;
-      function update(ts) {
-        if (!startTime) startTime = ts;
-        const progress = ts - startTime;
-        const pct = Math.min(progress / duration, 1);
-        el.textContent = Math.floor(start + (end - start) * pct).toLocaleString();
-        if (pct < 1) requestAnimationFrame(update);
+      if (hasAnimatedSummary) {
+        el.textContent = item.value.toLocaleString();
+      } else {
+        setTimeout(() => animateNumber(el, item.value), 3200);
       }
-      requestAnimationFrame(update);
-    }
+    });
+    hasAnimatedSummary = true;
+  }
 
-    function renderSummary(data) {
-      const container = document.getElementById("summary");
-      container.innerHTML = "";
-      data.forEach(item => {
-        const div = document.createElement("div");
-        div.className = "card";
-        div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
-        container.appendChild(div);
-        setTimeout(() => animateNumber(div.querySelector(".value"), item.value), 3200);
-      });
-    }
+  async function loadData() {
+    const rows = await fetchSheet();
+    const summary = [], clinics = [], months = [];
+    let mode = "summary";
 
-    async function loadData() {
-      const rows = await fetchSheet();
-      const summary = [], clinics = [], months = [];
-      let mode = "summary";
+    rows.forEach(r => {
+      const label = r.Label?.trim(), value = r.Value?.trim();
+      if (!label && !value) return;
 
-      rows.forEach(r => {
-        const label = r.Label?.trim();
-        const value = r.Value?.trim();
-        if (!label && !value) return;
+      if (label === "Cliniwise total screening") { mode = "clinic"; return; }
+      if (label === "Monthwise total screening") { mode = "month"; return; }
 
-        if (label === "Cliniwise total screening") { mode = "clinic"; return; }
-        if (label === "Monthwise total screening") { mode = "month"; return; }
+      if (mode === "clinic" && label && value) clinics.push({ Clinic: label, Count: +value });
+      else if (mode === "month" && label && value && isMonth(label)) months.push({ Month: label, Count: +value });
+      else if (mode === "summary" && label && value) summary.push({ label, value: +value });
+    });
 
-        if (mode === "clinic" && label && value) clinics.push({ Clinic: label, Count: +value });
-        else if (mode === "month" && label && value && isMonth(label)) months.push({ Month: label, Count: +value });
-        else if (mode === "summary" && label && value) summary.push({ label, value: +value });
-      });
+    renderSummary(summary);
 
-      renderSummary(summary);
-
-      if (window.clinicChart) window.clinicChart.destroy();
-      window.clinicChart = new Chart(document.getElementById("clinicChart").getContext("2d"), {
+    if (window.clinicChart) window.clinicChart.destroy();
+    window.clinicChart = new Chart(
+      document.getElementById("clinicChart").getContext("2d"), {
         type: "bar",
         data: {
           labels: clinics.map(c => c.Clinic),
           datasets: [{ label: "Screenings by Clinic", data: clinics.map(c => c.Count), backgroundColor: "#0077cc" }]
         },
         options: { indexAxis: "y", responsive: true, scales: { x: { beginAtZero: true } } }
-      });
+      }
+    );
 
-      if (window.monthChart) window.monthChart.destroy();
-      window.monthChart = new Chart(document.getElementById("monthChart").getContext("2d"), {
+    if (window.monthChart) window.monthChart.destroy();
+    window.monthChart = new Chart(
+      document.getElementById("monthChart").getContext("2d"), {
         type: "line",
         data: {
           labels: months.map(m => m.Month),
           datasets: [{ label: "Screenings by Month", data: months.map(m => m.Count), borderColor: "#10b981", backgroundColor: "#10b981", tension: 0.4 }]
         },
         options: { responsive: true, scales: { y: { beginAtZero: true } } }
-      });
-    }
+      }
+    );
+  }
 
-    function switchTab(tab) {
-      document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
-      document.querySelector(`.tabs button[onclick*="${tab}"]`).classList.add("active");
-      document.getElementById("clinicChartContainer").style.display = tab === "clinic" ? "block" : "none";
-      document.getElementById("monthChartContainer").style.display = tab === "month" ? "block" : "none";
-    }
+  function switchTab(tab) {
+    document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
+    document.querySelector(`.tabs button[onclick*="${tab}"]`).classList.add("active");
+    document.getElementById("clinicChartContainer").style.display = tab === "clinic" ? "block" : "none";
+    document.getElementById("monthChartContainer").style.display = tab === "month" ? "block" : "none";
+  }
 
-    const canvas = document.getElementById("bg");
-    const ctx = canvas.getContext("2d");
-    let w = canvas.width = window.innerWidth, h = canvas.height = window.innerHeight;
-    window.onresize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
-
-    const sparks = [];
-    document.addEventListener("mousemove", e => {
-      for (let i = 0; i < 5; i++) sparks.push({
-        x: e.clientX, y: e.clientY,
-        vx: (Math.random() - 0.5) * 2,
-        vy: (Math.random() - 0.5) * 2,
-        alpha: 1, radius: Math.random() * 2 + 1
-      });
+  const canvas = document.getElementById("bg");
+  const ctx = canvas.getContext("2d");
+  let w = canvas.width = window.innerWidth, h = canvas.height = window.innerHeight;
+  window.onresize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
+  const sparks = [];
+  document.addEventListener("mousemove", e => {
+    for (let i = 0; i < 5; i++) sparks.push({
+      x: e.clientX, y: e.clientY,
+      vx: (Math.random() - 0.5) * 2,
+      vy: (Math.random() - 0.5) * 2,
+      alpha: 1, radius: Math.random() * 2 + 1
     });
-    function draw() {
-      ctx.clearRect(0,0,w,h);
-      sparks.forEach((p,i) => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, 2*Math.PI);
-        ctx.fillStyle = `rgba(0,255,255,${p.alpha})`;
-        ctx.fill();
-        p.x += p.vx; p.y += p.vy;
-        p.alpha -= 0.02;
-        if (p.alpha <= 0) sparks.splice(i,1);
-      });
-      requestAnimationFrame(draw);
-    }
-    draw();
-
-    setTimeout(() => {
-      document.querySelector(".intro").style.display = "none";
-      document.getElementById("dashboard").style.display = "block";
-    }, 3100);
-
-    document.getElementById("themeToggle").addEventListener("click", () => {
-      document.body.classList.toggle("light");
-      document.getElementById("themeToggle").textContent = document.body.classList.contains("light") ? "☀️" : "🌙";
+  });
+  function draw() {
+    ctx.clearRect(0,0,w,h);
+    sparks.forEach((p,i) => {
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.radius,0,2*Math.PI);
+      ctx.fillStyle = `rgba(0,255,255,${p.alpha})`;
+      ctx.fill();
+      p.x += p.vx; p.y += p.vy;
+      p.alpha -= 0.02;
+      if (p.alpha <= 0) sparks.splice(i,1);
     });
+    requestAnimationFrame(draw);
+  }
+  draw();
 
-    document.addEventListener("DOMContentLoaded", () => {
-      loadData();
-      setInterval(loadData, 5000); // refresh every 5 seconds
-    });
-  </script>
+  setTimeout(() => {
+    document.querySelector(".intro").style.display = "none";
+    document.getElementById("dashboard").style.display = "block";
+  }, 3100);
+
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    document.body.classList.toggle("light");
+    document.getElementById("themeToggle").textContent = document.body.classList.contains("light") ? "☀️" : "🌙";
+  });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    loadData();
+    setInterval(loadData, 5000);
+  });
+</script>
 </body>
 </html>
