@@ -174,38 +174,21 @@
       return /\w{3,}-\d{4}/.test(str) || /\w{3,} \d{4}/.test(str);
     }
 
-    async function initDashboard() {
-      const rows = await fetchSheet();
-
-      const summary = [];
-      const clinics = [];
-      const months = [];
-
-      let mode = 'summary';
-
-      for (let i = 0; i < rows.length; i++) {
-        const label = rows[i].Label?.trim();
-        const value = rows[i].Value?.trim();
-
-        if (!label && !value) continue;
-
-        if (label === 'Cliniwise total screening') {
-          mode = 'clinic';
-          continue;
-        }
-        if (label === 'Monthwise total screening') {
-          mode = 'month';
-          continue;
-        }
-        if (mode === 'clinic' && label && value) {
-          clinics.push({ Clinic: label, Count: Number(value) });
-        } else if (mode === 'month' && label && value && isMonth(label)) {
-          months.push({ Month: label, Count: Number(value) });
-        } else if (mode === 'summary' && label && value) {
-          summary.push({ label, value: Number(value) });
-        }
+    function animateNumber(el, end, duration = 2000) {
+      let start = 0;
+      let startTime = null;
+      function update(currentTime) {
+        if (!startTime) startTime = currentTime;
+        const progress = currentTime - startTime;
+        const percent = Math.min(progress / duration, 1);
+        const value = Math.floor(start + (end - start) * percent);
+        el.textContent = value.toLocaleString();
+        if (percent < 1) requestAnimationFrame(update);
       }
+      requestAnimationFrame(update);
+    }
 
+    function renderSummary(summary) {
       const summaryContainer = document.getElementById('summary');
       summaryContainer.innerHTML = '';
       summary.forEach(item => {
@@ -213,57 +196,52 @@
         div.className = 'card';
         div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
         summaryContainer.appendChild(div);
-        animateNumber(div.querySelector('.value'), item.value);
+        setTimeout(() => animateNumber(div.querySelector('.value'), item.value, 2000), 3200);
       });
+    }
+
+    async function loadData() {
+      const rows = await fetchSheet();
+      const summary = [], clinics = [], months = [];
+      let mode = 'summary';
+      for (let i = 0; i < rows.length; i++) {
+        const label = rows[i].Label?.trim();
+        const value = rows[i].Value?.trim();
+        if (!label && !value) continue;
+        if (label === 'Cliniwise total screening') { mode = 'clinic'; continue; }
+        if (label === 'Monthwise total screening') { mode = 'month'; continue; }
+        if (mode === 'clinic' && label && value) clinics.push({ Clinic: label, Count: Number(value) });
+        else if (mode === 'month' && label && value && isMonth(label)) months.push({ Month: label, Count: Number(value) });
+        else if (mode === 'summary' && label && value) summary.push({ label, value: Number(value) });
+      }
+
+      renderSummary(summary);
+
+      if (window.clinicChart) window.clinicChart.destroy();
+      if (window.monthChart) window.monthChart.destroy();
 
       window.clinicChart = new Chart(document.getElementById("clinicChart").getContext("2d"), {
         type: "bar",
         data: {
           labels: clinics.map(c => c.Clinic),
-          datasets: [{
-            label: "Screenings by Clinic",
-            data: clinics.map(c => c.Count),
-            backgroundColor: "#0077cc"
-          }]
+          datasets: [{ label: "Screenings by Clinic", data: clinics.map(c => c.Count), backgroundColor: "#0077cc" }]
         },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          scales: { x: { beginAtZero: true } }
-        }
+        options: { indexAxis: "y", responsive: true, scales: { x: { beginAtZero: true } } }
       });
 
       window.monthChart = new Chart(document.getElementById("monthChart").getContext("2d"), {
         type: "line",
         data: {
           labels: months.map(m => m.Month),
-          datasets: [{
-            label: "Screenings by Month",
-            data: months.map(m => m.Count),
-            borderColor: "#10b981",
-            backgroundColor: "#10b981",
-            tension: 0.4
-          }]
+          datasets: [{ label: "Screenings by Month", data: months.map(m => m.Count), borderColor: "#10b981", backgroundColor: "#10b981", tension: 0.4 }]
         },
-        options: {
-          responsive: true,
-          scales: { y: { beginAtZero: true } }
-        }
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
       });
     }
 
-    function animateNumber(el, end) {
-      let current = 0;
-      const step = () => {
-        current += Math.ceil(end / 60);
-        if (current >= end) {
-          el.textContent = end.toLocaleString();
-        } else {
-          el.textContent = current.toLocaleString();
-          requestAnimationFrame(step);
-        }
-      };
-      step();
+    async function initDashboard() {
+      await loadData();
+      setInterval(loadData, 60000);
     }
 
     function switchTab(tab) {
