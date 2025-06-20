@@ -293,7 +293,7 @@
     setInterval(async () => {
       const rows = await fetchSheet();
       processAndRender(rows, false);
-    }, 60000);
+    }, 5000);
 
     // Intro transition
     setTimeout(() => {
