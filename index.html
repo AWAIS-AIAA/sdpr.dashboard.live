@@ -165,6 +165,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
+    let clinicChart, monthChart;
+
     async function fetchSheet() {
       const res = await fetch("https://opensheet.elk.sh/1kD2yBks4NTm3xN5bZSDse1gJfPohmqkRxhXaxkQ8tL0/Data");
       return await res.json();
@@ -174,85 +176,11 @@
       return /\w{3,}-\d{4}/.test(str) || /\w{3,} \d{4}/.test(str);
     }
 
-    async function initDashboard() {
-      const rows = await fetchSheet();
-
-      const summary = [];
-      const clinics = [];
-      const months = [];
-
-      let mode = 'summary';
-
-      for (let i = 0; i < rows.length; i++) {
-        const label = rows[i].Label?.trim();
-        const value = rows[i].Value?.trim();
-
-        if (!label && !value) continue;
-
-        if (label === 'Cliniwise total screening') {
-          mode = 'clinic';
-          continue;
-        }
-        if (label === 'Monthwise total screening') {
-          mode = 'month';
-          continue;
-        }
-        if (mode === 'clinic' && label && value) {
-          clinics.push({ Clinic: label, Count: Number(value) });
-        } else if (mode === 'month' && label && value && isMonth(label)) {
-          months.push({ Month: label, Count: Number(value) });
-        } else if (mode === 'summary' && label && value) {
-          summary.push({ label, value: Number(value) });
-        }
+    function animateNumber(el, end, animate = true) {
+      if (!animate) {
+        el.textContent = end.toLocaleString();
+        return;
       }
-
-      const summaryContainer = document.getElementById('summary');
-      summaryContainer.innerHTML = '';
-      summary.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'card';
-        div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
-        summaryContainer.appendChild(div);
-        animateNumber(div.querySelector('.value'), item.value);
-      });
-
-      window.clinicChart = new Chart(document.getElementById("clinicChart").getContext("2d"), {
-        type: "bar",
-        data: {
-          labels: clinics.map(c => c.Clinic),
-          datasets: [{
-            label: "Screenings by Clinic",
-            data: clinics.map(c => c.Count),
-            backgroundColor: "#0077cc"
-          }]
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          scales: { x: { beginAtZero: true } }
-        }
-      });
-
-      window.monthChart = new Chart(document.getElementById("monthChart").getContext("2d"), {
-        type: "line",
-        data: {
-          labels: months.map(m => m.Month),
-          datasets: [{
-            label: "Screenings by Month",
-            data: months.map(m => m.Count),
-            borderColor: "#10b981",
-            backgroundColor: "#10b981",
-            tension: 0.4
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: { y: { beginAtZero: true } }
-        }
-      });
-    }
-
-    function animateNumber(el, end) {
       let current = 0;
       const step = () => {
         current += Math.ceil(end / 60);
@@ -266,6 +194,94 @@
       step();
     }
 
+    async function initDashboard() {
+      const rows = await fetchSheet();
+      processAndRender(rows, true);
+    }
+
+    function processAndRender(rows, animate = false) {
+      const summary = [], clinics = [], months = [];
+      let mode = 'summary';
+
+      for (const row of rows) {
+        const label = row.Label?.trim();
+        const value = row.Value?.trim();
+        if (!label && !value) continue;
+
+        if (label === 'Cliniwise total screening') {
+          mode = 'clinic'; continue;
+        }
+        if (label === 'Monthwise total screening') {
+          mode = 'month'; continue;
+        }
+
+        if (mode === 'clinic' && label && value) clinics.push({ Clinic: label, Count: Number(value) });
+        else if (mode === 'month' && label && value && isMonth(label)) months.push({ Month: label, Count: Number(value) });
+        else if (mode === 'summary' && label && value) summary.push({ label, value: Number(value) });
+      }
+
+      const summaryContainer = document.getElementById('summary');
+      if (animate) {
+        summaryContainer.innerHTML = '';
+        summary.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'card';
+          div.innerHTML = `<div class="label">${item.label}</div><div class="value">0</div>`;
+          summaryContainer.appendChild(div);
+          animateNumber(div.querySelector('.value'), item.value, true);
+        });
+      } else {
+        document.querySelectorAll('#summary .value').forEach((el, i) => {
+          if (summary[i]) animateNumber(el, summary[i].value, false);
+        });
+      }
+
+      if (animate) {
+        clinicChart = new Chart(document.getElementById("clinicChart").getContext("2d"), {
+          type: "bar",
+          data: {
+            labels: clinics.map(c => c.Clinic),
+            datasets: [{
+              label: "Screenings by Clinic",
+              data: clinics.map(c => c.Count),
+              backgroundColor: "#0077cc"
+            }]
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            scales: { x: { beginAtZero: true } }
+          }
+        });
+
+        monthChart = new Chart(document.getElementById("monthChart").getContext("2d"), {
+          type: "line",
+          data: {
+            labels: months.map(m => m.Month),
+            datasets: [{
+              label: "Screenings by Month",
+              data: months.map(m => m.Count),
+              borderColor: "#10b981",
+              backgroundColor: "#10b981",
+              tension: 0.4
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } }
+          }
+        });
+      } else {
+        clinicChart.data.labels = clinics.map(c => c.Clinic);
+        clinicChart.data.datasets[0].data = clinics.map(c => c.Count);
+        clinicChart.update();
+
+        monthChart.data.labels = months.map(m => m.Month);
+        monthChart.data.datasets[0].data = months.map(m => m.Count);
+        monthChart.update();
+      }
+    }
+
     function switchTab(tab) {
       document.querySelectorAll('.tabs button').forEach(btn => btn.classList.remove('active'));
       document.querySelector(`.tabs button[onclick*="${tab}"]`).classList.add('active');
@@ -273,6 +289,13 @@
       document.getElementById("monthChartContainer").style.display = tab === 'month' ? 'block' : 'none';
     }
 
+    // Real-time updates every 60 seconds (no animation)
+    setInterval(async () => {
+      const rows = await fetchSheet();
+      processAndRender(rows, false);
+    }, 60000);
+
+    // Intro transition
     setTimeout(() => {
       document.querySelector('.intro').style.display = 'none';
       document.getElementById('dashboard').style.display = 'block';
@@ -284,6 +307,7 @@
         document.body.classList.contains("light") ? "☀️" : "🌙";
     });
 
+    // Sparkle effect
     const canvas = document.getElementById('bg');
     const ctx = canvas.getContext('2d');
     let w = canvas.width = window.innerWidth;
@@ -322,65 +346,6 @@
     }
 
     draw();
-// Refresh Data
-    let summary = [], clinics = [], months = [];
-
-async function fetchAndUpdate() {
-  const rows = await fetchSheet();
-
-  const newSummary = [];
-  const newClinics = [];
-  const newMonths = [];
-
-  let mode = 'summary';
-
-  for (let i = 0; i < rows.length; i++) {
-    const label = rows[i].Label?.trim();
-    const value = rows[i].Value?.trim();
-
-    if (!label && !value) continue;
-    if (label === 'Cliniwise total screening') {
-      mode = 'clinic';
-      continue;
-    }
-    if (label === 'Monthwise total screening') {
-      mode = 'month';
-      continue;
-    }
-
-    if (mode === 'clinic' && label && value) {
-      newClinics.push({ Clinic: label, Count: Number(value) });
-    } else if (mode === 'month' && label && value && isMonth(label)) {
-      newMonths.push({ Month: label, Count: Number(value) });
-    } else if (mode === 'summary' && label && value) {
-      newSummary.push({ label, value: Number(value) });
-    }
-  }
-
-  // Update Summary Cards
-  document.querySelectorAll('#summary .value').forEach((el, i) => {
-    if (newSummary[i]) animateNumber(el, newSummary[i].value);
-  });
-
-  // Update Clinic Chart
-  clinicChart.data.labels = newClinics.map(c => c.Clinic);
-  clinicChart.data.datasets[0].data = newClinics.map(c => c.Count);
-  clinicChart.update();
-
-  // Update Month Chart
-  monthChart.data.labels = newMonths.map(m => m.Month);
-  monthChart.data.datasets[0].data = newMonths.map(m => m.Count);
-  monthChart.update();
-
-  // Update cached data
-  summary = newSummary;
-  clinics = newClinics;
-  months = newMonths;
-}
-
-// 🔁 Check for updates every 60 seconds
-setInterval(fetchAndUpdate, 5000);
-    
     document.addEventListener('DOMContentLoaded', initDashboard);
   </script>
 </body>
